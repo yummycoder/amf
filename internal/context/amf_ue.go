@@ -538,6 +538,29 @@ func (ue *AmfUe) DerivateAnKey(anType models.AccessType) {
 	}
 }
 
+// DerivateKN3IWFSN derives the MN-anchored secondary-leg N3IWF key for the
+// NR-DC model where the UE registers only via the master node and no EAP-5G
+// exchange occurs over the N3IWF. It is deterministic from context both the UE
+// and the AMF already hold after the primary registration (K_AMF, SUPI, the
+// PDU session ID), so no uplink NAS COUNT is used and nothing is exchanged for
+// the derivation. Per-tunnel key freshness is provided by the IKE_SA_INIT
+// nonce/DH exchange (RFC 7296); this key only authenticates IKE_AUTH.
+// It MUST stay byte-for-byte identical to snkey.DeriveKN3IWFSN on the UE side.
+func (ue *AmfUe) DerivateKN3IWFSN(pduSessionID uint8) ([]byte, error) {
+	kamf, err := hex.DecodeString(ue.Kamf)
+	if err != nil {
+		return nil, err
+	}
+	p0 := []byte(ue.Supi)
+	l0 := ueauth.KDFLen(p0)
+	p1 := []byte{security.AccessTypeNon3GPP}
+	l1 := ueauth.KDFLen(p1)
+	p2 := []byte{pduSessionID}
+	l2 := ueauth.KDFLen(p2)
+	return ueauth.GetKDFValue(kamf, ueauth.FC_FOR_KGNB_KN3IWF_DERIVATION,
+		p0, l0, p1, l1, p2, l2)
+}
+
 // NH Derivation function defined in TS 33.501 Annex A.10
 func (ue *AmfUe) DerivateNH(syncInput []byte) {
 	P0 := syncInput
