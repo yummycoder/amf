@@ -686,11 +686,11 @@ func handlePDUSessionResourceSetupResponseMain(ran *context.AmfRan,
 	for ith, req_ue := range context.GetSelf().PduSessionEstReqCounter.Ues {
 		if req_ue == amfUe {
 			context.GetSelf().PduSessionEstReqCounter.Ues[ith] = context.GetSelf().PduSessionEstReqCounter.Ues[len(context.GetSelf().PduSessionEstReqCounter.Ues)-1]
-			context.GetSelf().PduSessionEstReqCounter.Ues=context.GetSelf().PduSessionEstReqCounter.Ues[:len(context.GetSelf().PduSessionEstReqCounter.Ues)-1]
+			context.GetSelf().PduSessionEstReqCounter.Ues = context.GetSelf().PduSessionEstReqCounter.Ues[:len(context.GetSelf().PduSessionEstReqCounter.Ues)-1]
 			context.GetSelf().PduSessionEstReqCounter.MinusOne()
 			break
 		}
-		if ith == len(context.GetSelf().PduSessionEstReqCounter.Ues)-1{
+		if ith == len(context.GetSelf().PduSessionEstReqCounter.Ues)-1 {
 			ranUe.Log.Warnf("not in req list")
 		}
 	}
@@ -927,6 +927,9 @@ func handlePDUSessionResourceModifyIndicationMain(ran *context.AmfRan,
 				ranUe.Log.Warnf("SmContext[PDU Session ID:%d] not found", pduSessionID)
 				// TODO: Check if doing error handling here
 				continue
+			}
+			if n3iwfSNEnabled() {
+				go triggerN3iwfSNAdd(amfUe, smContext, uint8(pduSessionID), transfer)
 			}
 			response, errResponse, _, err := consumer.GetConsumer().SendUpdateSmContextN2Info(amfUe, smContext,
 				models.N2SmInfoType_PDU_RES_MOD_IND, transfer)
@@ -1665,12 +1668,12 @@ func handleHandoverRequiredMain(ran *context.AmfRan,
 		}
 
 		elem := context.N2HandoverRequiredElem{
-			SourceUe: sourceUe,
-			TargetRan: targetRan,
-			Cause: *cause,
-			PduSessionReqList: pduSessionReqList,
+			SourceUe:                           sourceUe,
+			TargetRan:                          targetRan,
+			Cause:                              *cause,
+			PduSessionReqList:                  pduSessionReqList,
 			SourceToTargetTransparentContainer: *sourceToTargetTransparentContainer,
-			Nsci: false,
+			Nsci:                               false,
 			// DoneChan: make(chan error),
 		}
 		context.GetSelf().N2HandoverRequiredChan <- elem
