@@ -1,9 +1,12 @@
 package context
 
 import (
+	"encoding/binary"
 	"sync"
 
+	"github.com/free5gc/aper"
 	"github.com/nycu-ucr/nas/nasMessage"
+	"github.com/nycu-ucr/ngap/ngapType"
 	"github.com/nycu-ucr/openapi/models"
 )
 
@@ -29,6 +32,12 @@ type SmContext struct {
 	// for duplicate pdu session id handling
 	ulNASTransport *nasMessage.ULNASTransport
 	duplicated     bool
+
+	// NR-DC: UL TEID the SMF allocated for the split (secondary-node) leg of
+	// this PDU session (LocalULTeidForSplitPDUSession). Learned from the
+	// AdditionalULNGUUPTNLInformation IE of the PDUSessionResourceSetupRequestTransfer
+	// the SMF hands us at establishment; 0 until seen.
+	splitUlTeid uint32
 }
 
 func NewSmContext(pduSessionID int32) *SmContext {
@@ -208,4 +217,40 @@ func (c *SmContext) DeleteULNASTransport() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ulNASTransport = nil
+}
+
+func (c *SmContext) SplitUlTeid() uint32 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.splitUlTeid
+}
+
+func (c *SmContext) SetSplitUlTeid(teid uint32) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.splitUlTeid = teid
+}
+
+// SplitUlTeidFromSetupRequestTransfer decodes a PDUSessionResourceSetupRequestTransfer
+// and returns the GTP TEID carried in its first AdditionalULNGUUPTNLInformation item,
+// i.e. the UPF-side UL TEID for the NR-DC split leg.
+func SplitUlTeidFromSetupRequestTransfer(transfer []byte) (uint32, bool) {
+	var t ngapType.PDUSessionResourceSetupRequestTransfer
+	if err := aper.UnmarshalWithParams(transfer, &t, "valueExt"); err != nil {
+		return 0, false
+	}
+	for _, ie := range t.ProtocolIEs.List {
+		if ie.Id.Value != ngapType.ProtocolIEIDAdditionalULNGUUPTNLInformation ||
+			ie.Value.AdditionalULNGUUPTNLInformation == nil {
+			continue
+		}
+		for _, item := range ie.Value.AdditionalULNGUUPTNLInformation.List {
+			gtp := item.NGUUPTNLInformation.GTPTunnel
+			if gtp == nil || len(gtp.GTPTEID.Value) != 4 {
+				continue
+			}
+			return binary.BigEndian.Uint32(gtp.GTPTEID.Value), true
+		}
+	}
+	return 0, false
 }

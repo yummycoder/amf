@@ -215,6 +215,15 @@ func (p *Processor) N1N2MessageTransferProcedure(ueContextID string, reqUri stri
 			switch smInfo.N2InfoContent.NgapIeType {
 			case models.AmfCommunicationNgapIeType_PDU_RES_SETUP_REQ:
 				ue.ProducerLog.Debugln("AMF Transfer NGAP PDU Session Resource Setup Request from SMF")
+				// NR-DC: remember the SMF's split-leg UL TEID so the N3IWF SN-Add
+				// can program the real value instead of a constant.
+				if smCtx, ok := ue.SmContextFindByPDUSessionID(smInfo.PduSessionId); ok {
+					if teid, found := context.SplitUlTeidFromSetupRequestTransfer(n2Info); found {
+						smCtx.SetSplitUlTeid(teid)
+						ue.ProducerLog.Infof("N3IWF-SN: PDU %d split UL TEID=%d learned from SMF setup transfer",
+							smInfo.PduSessionId, teid)
+					}
+				}
 				if ue.RanUe[anType].InitialContextSetup {
 					list := ngapType.PDUSessionResourceSetupListSUReq{}
 					ngap_message.AppendPDUSessionResourceSetupListSUReq(&list, smInfo.PduSessionId, *smInfo.SNssai, nasPdu, n2Info)

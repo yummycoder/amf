@@ -54,12 +54,24 @@ func n3iwfSNUpf() string {
 	return "192.168.4.2"
 }
 
-func n3iwfSNUlTeid() uint32 {
+// n3iwfSNUlTeid returns the UPF-side UL TEID for the SN leg: the value the SMF
+// allocated for this session (learned from its setup-request transfer), else the
+// N3IWF_SN_ULTEID env override, else 1. The SMF's TEID generator is global and
+// advances every registration, so only the learned value is correct beyond the
+// first registration of an SMF lifetime.
+func n3iwfSNUlTeid(smContext *amf_context.SmContext) uint32 {
+	if smContext != nil {
+		if teid := smContext.SplitUlTeid(); teid != 0 {
+			return teid
+		}
+	}
 	if v := os.Getenv("N3IWF_SN_ULTEID"); v != "" {
 		if n, err := strconv.ParseUint(v, 10, 32); err == nil {
+			logger.NgapLog.Warnf("N3IWF-SN: split UL TEID not learned from SMF, using N3IWF_SN_ULTEID=%d", n)
 			return uint32(n)
 		}
 	}
+	logger.NgapLog.Warnf("N3IWF-SN: split UL TEID not learned from SMF, using default 1")
 	return 1
 }
 
@@ -73,14 +85,14 @@ func triggerN3iwfSNAdd(amfUe *amf_context.AmfUe, smContext *amf_context.SmContex
 		logger.NgapLog.Errorf("N3IWF-SN: derive K_N3IWF_SN failed: %v", err)
 		return
 	}
-	logger.NgapLog.Infof("N3IWF-SN: derived K_N3IWF_SN SUPI=%s PDU=%d key=%s",
-		amfUe.Supi, pduSessionID, hex.EncodeToString(k))
+	logger.NgapLog.Infof("N3IWF-SN: derived K_N3IWF_SN SUPI=%s PDU=%d key=%s UL-TEID=%d",
+		amfUe.Supi, pduSessionID, hex.EncodeToString(k), n3iwfSNUlTeid(smContext))
 	req := n3iwfSNAddReq{
 		SUPI:              amfUe.Supi,
 		Kn3iwfHex:         hex.EncodeToString(k),
 		PDUSessionID:      uint32(pduSessionID),
 		QFIs:              []int{1},
-		UplinkTEID:        n3iwfSNUlTeid(),
+		UplinkTEID:        n3iwfSNUlTeid(smContext),
 		UPFN3Address:      n3iwfSNUpf(),
 		SecurityIntegrity: true,
 	}
